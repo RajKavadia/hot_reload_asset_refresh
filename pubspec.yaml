@@ -1,0 +1,41 @@
+name: hot_reload_asset_refresh
+description: Refreshes changed image and asset files on Flutter hot reload, with no app code changes.
+version: 0.0.1
+homepage:
+
+environment:
+  sdk: ^3.13.2
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        dartPluginClass: HotReloadAssetRefreshPlugin
+        dartFileName: src/auto_binding.dart
+      ios:
+        dartPluginClass: HotReloadAssetRefreshPlugin
+        dartFileName: src/auto_binding.dart
+      linux:
+        dartPluginClass: HotReloadAssetRefreshPlugin
+        dartFileName: src/auto_binding.dart
+      macos:
+        dartPluginClass: HotReloadAssetRefreshPlugin
+        dartFileName: src/auto_binding.dart
+      windows:
+        dartPluginClass: HotReloadAssetRefreshPlugin
+        dartFileName: src/auto_binding.dart
+      web:
+        pluginClass: HotReloadAssetRefreshWebPlugin
+        fileName: hot_reload_asset_refresh_web.dart
