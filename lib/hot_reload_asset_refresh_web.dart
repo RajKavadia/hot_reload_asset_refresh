@@ -8,7 +8,10 @@ import 'src/log.dart';
 ///
 /// The generated web plugin registrant runs this before the app's `main`.
 class HotReloadAssetRefreshWebPlugin {
-  /// Registers the asset refresh behavior.
+  /// Registers the asset refresh behavior on the web.
+  ///
+  /// The [registrar] is provided by Flutter; it is unused because registration
+  /// is handled through [HotReloadAssetRefreshPlugin].
   static void registerWith(Registrar registrar) {
     assetLog('HotReloadAssetRefreshWebPlugin.registerWith called');
     HotReloadAssetRefreshPlugin.registerWith();

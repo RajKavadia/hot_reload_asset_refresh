@@ -9,3 +9,4 @@
 library;
 
 export 'src/asset_refresh.dart';
+export 'src/cache_refresh.dart' show clearAssetCaches;

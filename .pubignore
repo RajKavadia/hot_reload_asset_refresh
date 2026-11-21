@@ -1,0 +1,6 @@
+.idea/
+.commandcode/
+**/build/
+**/.dart_tool/
+example/.dart_tool/
+example/build/

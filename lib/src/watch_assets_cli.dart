@@ -4,6 +4,7 @@ import 'asset_directories.dart';
 
 /// Options for the `watch_assets` development script.
 class WatchAssetsOptions {
+  /// Creates watch options for the `watch_assets` CLI.
   const WatchAssetsOptions({
     required this.pubspec,
     required this.directoryPaths,
@@ -11,9 +12,16 @@ class WatchAssetsOptions {
     this.verbose = false,
   });
 
+  /// Pubspec file that `watch_assets` touches to trigger a bundle rebuild.
   final File pubspec;
+
+  /// Explicit directory paths to watch; may be empty to read from [pubspec].
   final List<String> directoryPaths;
+
+  /// When true, log touches without modifying [pubspec].
   final bool dryRun;
+
+  /// When true, log all filesystem events under watched directories.
   final bool verbose;
 
   /// Reads declared directories from [pubspec] when [directoryPaths] is empty.

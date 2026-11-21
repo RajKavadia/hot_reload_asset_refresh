@@ -7,8 +7,15 @@ import 'test_environment.dart' if (dart.library.io) 'test_environment_io.dart';
 import 'web_asset_refresh.dart'
     if (dart.library.js_interop) 'web_asset_refresh_web.dart'
     as web;
+
+/// Flutter plugin entry point for native platforms.
+///
+/// The Flutter tool invokes [registerWith] when the app starts. In debug mode
+/// this installs a binding that clears asset caches on hot reload.
 class HotReloadAssetRefreshPlugin {
-  /// Registers the asset refresh behavior. Called by the Flutter tool.
+  /// Registers the asset refresh behavior.
+  ///
+  /// Called automatically by the Flutter tool; apps do not call this directly.
   static void registerWith() {
     assetLog(
       'registerWith: kDebugMode=$kDebugMode isFlutterTest=$isFlutterTest '
