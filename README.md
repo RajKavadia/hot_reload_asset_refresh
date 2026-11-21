@@ -4,7 +4,8 @@ Refreshes changed assets on Flutter hot reload. **No widget wrapping and no app
 code changes**: add the dependency, and the package's Flutter plugin registers
 itself at startup in debug builds.
 
-Works on Android, iOS, Linux, macOS, Windows, and web.
+Works on Android, iOS, Linux, macOS, Windows, and web. Debug hot reload only —
+not for release builds or runtime asset updates.
 
 ## Getting started
 
@@ -12,45 +13,54 @@ Add the dependency and run `flutter pub get`:
 
 ```yaml
 dependencies:
-  hot_reload_asset_refresh: ^0.0.1
+  hot_reload_asset_refresh: ^0.1.0
 ```
 
 That is the whole setup. Nothing in the app imports or calls the package.
 
 In debug builds the plugin installs a `WidgetsFlutterBinding` subclass before
-`main`. When the Flutter tool reports changed assets during a hot reload, the
-binding clears `ImageCache` and `rootBundle` before the widget tree reassembles,
-so images and string assets are re-read from disk instead of coming from the
-stale caches.
+`main`. On every hot reload it clears `ImageCache` and `rootBundle` before the
+widget tree reassembles, so images and string assets are re-read from disk
+instead of stale caches. When the Flutter tool reports specific changed assets,
+the binding also records them for a web cache refresh (`fetch` with
+`cache: 'no-store'`).
 
 Edit an image or other asset and save. The next hot reload picks it up.
+
+Try the **example** app: `cd example && flutter run`.
+
+Web integration tests (asset add/change/delete × hot reload vs restart):
+
+```sh
+cd example
+flutter test --platform chrome test/web/asset_lifecycle_web_test.dart
+```
 
 ## How it works
 
 - The package declares a Dart plugin (`dartPluginClass` on native platforms and
   a web plugin entry point). Flutter generates a plugin registrant that calls it
   at startup. On web the generated web plugin registrant runs it before `main`.
-- Hot reload reassembles the widget tree, and `WidgetsBinding.performReassemble`
-  is overridden to clear the caches right before the tree re-resolves its
-  `ImageProvider`s.
+- Hot reload reassembles the widget tree. `WidgetsBinding.performReassemble` is
+  overridden to clear caches every time, then optionally refresh changed asset
+  URLs on the web before descendants resolve `ImageProvider`s again.
 - Automatic registration is skipped in release builds, under `flutter test`, and
   under `flutter test integration_test`, so test bindings are never replaced.
 
-### Opting out
+### Verbose logs
 
-Apps with a custom binding, or integration tests run through `flutter drive`,
-can disable automatic registration:
+Most lines are prefixed with `[hot_reload_asset_refresh]`. For web fetch
+fingerprints and header dumps:
 
 ```sh
-flutter run --dart-define=HOT_RELOAD_ASSET_REFRESH=false
+flutter run --dart-define=HOT_RELOAD_ASSET_REFRESH_VERBOSE=true
 ```
-
-If you still want a refresh in that case, use the optional widget below.
 
 ## Optional widget
 
-`AssetRefresh` refreshes only its subtree. It is useful when automatic
-registration is disabled or when you want the refresh scoped explicitly:
+`AssetRefresh` refreshes only its subtree. It is useful when the app already
+has a custom binding (so automatic registration is skipped) or when you want the
+refresh scoped explicitly:
 
 ```dart
 import 'package:hot_reload_asset_refresh/hot_reload_asset_refresh.dart';
@@ -97,11 +107,26 @@ terminal from the project root:
 dart run hot_reload_asset_refresh:watch_assets
 ```
 
-It reads the directory entries from `flutter.assets` in `pubspec.yaml` (you can
-also pass directories explicitly, for example
-`dart run hot_reload_asset_refresh:watch_assets assets/ assets/icons/`). When a
-file is added or deleted in one of those directories, it touches `pubspec.yaml`,
-so the next hot reload rebuilds the asset bundle and regenerates the manifest.
+It reads directory entries from `flutter.assets` in `pubspec.yaml` (you can also
+pass directories explicitly). When a file is added or deleted in one of those
+directories, it touches `pubspec.yaml`, so the next hot reload rebuilds the
+asset bundle and regenerates the manifest.
+
+Options:
+
+```sh
+# Monorepo / package with a non-root pubspec
+dart run hot_reload_asset_refresh:watch_assets --pubspec=packages/app/pubspec.yaml
+
+# See what would be touched without modifying the pubspec
+dart run hot_reload_asset_refresh:watch_assets --dry-run
+
+# Log raw filesystem events
+dart run hot_reload_asset_refresh:watch_assets --verbose
+
+dart run hot_reload_asset_refresh:watch_assets assets/ assets/icons/
+```
+
 Hot reload after the change as usual (`r`, or let the IDE reload on the next
 save).
 
@@ -117,5 +142,8 @@ the rebuilt manifest.
 - Adding the package does not modify `main.dart`, the widget tree, or any other
   app source.
 - Fonts are loaded by the engine and are not reloaded.
-- Assets loaded through a custom `AssetBundle` and assets served from the
-  browser's HTTP cache may still be stale.
+- Only [rootBundle] is cleared. Assets loaded through a custom [AssetBundle] may
+  still be stale unless you clear that bundle or wrap the subtree with
+  [AssetRefresh].
+- On the web, browser HTTP caching is bypassed for assets the tool evicts during
+  hot reload; other cache behavior may still apply for custom loaders.

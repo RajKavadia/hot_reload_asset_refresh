@@ -11,31 +11,42 @@
 //
 //     dart run hot_reload_asset_refresh:watch_assets
 //     dart run hot_reload_asset_refresh:watch_assets assets/ assets/icons/
+//     dart run hot_reload_asset_refresh:watch_assets --pubspec=packages/app/pubspec.yaml
+//     dart run hot_reload_asset_refresh:watch_assets --dry-run --verbose
 //
-// Without arguments the directories are read from `flutter.assets` in
-// `pubspec.yaml`. Only directory entries are watched, matching Flutter: files
-// in subdirectories are only bundled when each subdirectory is declared.
+// Without directory arguments the directories are read from `flutter.assets` in
+// the pubspec. Only directory entries are watched, matching Flutter: files in
+// subdirectories are only bundled when each subdirectory is declared.
 
 import 'dart:async';
 import 'dart:io';
 
-import 'package:hot_reload_asset_refresh/src/asset_directories.dart';
+import 'package:hot_reload_asset_refresh/src/watch_assets_cli.dart';
 
 const _tool = 'watch_assets';
+const _touchDebounce = Duration(milliseconds: 300);
 
 Future<void> main(List<String> arguments) async {
-  final pubspec = File('pubspec.yaml');
+  final options = parseWatchAssetsArguments(arguments);
+  if (options == null) {
+    _printUsage();
+    exitCode = 64;
+    return;
+  }
+
+  final pubspec = options.pubspec;
   if (!pubspec.existsSync()) {
     stderr.writeln(
-      '$_tool: run this from the Flutter project root (no pubspec.yaml here).',
+      '$_tool: pubspec not found: ${pubspec.absolute.path}',
+    );
+    stderr.writeln(
+      'Run from the project root or pass --pubspec=path/to/pubspec.yaml.',
     );
     exitCode = 64;
     return;
   }
 
-  final requested = arguments.isEmpty
-      ? assetDirectoryEntries(pubspec.readAsStringSync())
-      : arguments;
+  final requested = options.resolveDirectoryPaths();
 
   final directories = <Directory>[];
   for (final path in requested) {
@@ -50,17 +61,22 @@ Future<void> main(List<String> arguments) async {
   if (directories.isEmpty) {
     stderr.writeln('$_tool: no asset directories to watch.');
     stderr.writeln(
-      'Pass them as arguments, for example: '
-      'dart run hot_reload_asset_refresh:watch_assets assets/ assets/icons/',
+      'Pass directories as arguments or declare them under flutter.assets.',
     );
     exitCode = 64;
     return;
   }
 
+  final watcher = _PubspecTouchWatcher(
+    pubspec: pubspec,
+    dryRun: options.dryRun,
+    verbose: options.verbose,
+  );
+
   for (final directory in directories) {
     try {
       directory.watch().listen(
-        (event) => _handleEvent(event, pubspec),
+        watcher.handleEvent,
         onError: (Object error) {
           stderr.writeln('$_tool: error watching ${directory.path}: $error');
         },
@@ -70,9 +86,13 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
+  stdout.writeln('$_tool: pubspec=${pubspec.path}');
   stdout.writeln(
     '$_tool: watching ${directories.map((d) => d.path).join(', ')}',
   );
+  if (options.dryRun) {
+    stdout.writeln('$_tool: dry-run mode (pubspec will not be modified).');
+  }
   stdout.writeln(
     '$_tool: additions and deletions touch pubspec.yaml so the next hot '
     'reload rebuilds the asset bundle.',
@@ -80,29 +100,89 @@ Future<void> main(List<String> arguments) async {
   await stdout.flush();
 }
 
-Timer? _pendingTouch;
-
-void _handleEvent(FileSystemEvent event, File pubspec) {
-  final change = switch (event) {
-    FileSystemCreateEvent() => 'added',
-    FileSystemDeleteEvent() => 'removed',
-    _ => null,
-  };
-  if (change == null) {
-    return;
+String _eventTypeLabel(FileSystemEvent event) {
+  if (event is FileSystemCreateEvent) {
+    return 'create';
   }
+  if (event is FileSystemModifyEvent) {
+    return 'modify';
+  }
+  if (event is FileSystemDeleteEvent) {
+    return 'delete';
+  }
+  if (event is FileSystemMoveEvent) {
+    return 'move';
+  }
+  return 'other';
+}
 
-  _pendingTouch?.cancel();
-  _pendingTouch = Timer(const Duration(milliseconds: 100), () async {
-    try {
-      pubspec.setLastModifiedSync(DateTime.now());
-      stdout.writeln(
-        '$_tool: $change ${event.path}; pubspec.yaml touched - '
-        'hot reload to rebuild the asset bundle.',
-      );
-      await stdout.flush();
-    } on FileSystemException catch (error) {
-      stderr.writeln('$_tool: cannot touch pubspec.yaml: ${error.message}');
-    }
+void _printUsage() {
+  stderr.writeln('''
+$_tool: watch asset directories and touch pubspec.yaml on add/remove.
+
+Usage:
+  dart run hot_reload_asset_refresh:watch_assets [options] [directories...]
+
+Options:
+  --pubspec=<path>   Pubspec to touch (default: pubspec.yaml in the cwd)
+  --pubspec <path>   Same as --pubspec=<path>
+  --dry-run          Log touches without modifying pubspec.yaml
+  --verbose          Log every filesystem event (not only touches)
+
+Examples:
+  dart run hot_reload_asset_refresh:watch_assets
+  dart run hot_reload_asset_refresh:watch_assets assets/ assets/icons/
+  dart run hot_reload_asset_refresh:watch_assets --pubspec=packages/app/pubspec.yaml
+''');
+}
+
+class _PubspecTouchWatcher {
+  _PubspecTouchWatcher({
+    required this.pubspec,
+    required this.dryRun,
+    required this.verbose,
   });
+
+  final File pubspec;
+  final bool dryRun;
+  final bool verbose;
+  Timer? _pendingTouch;
+
+  void handleEvent(FileSystemEvent event) {
+    if (verbose) {
+      stdout.writeln('$_tool: event ${_eventTypeLabel(event)} ${event.path}');
+    }
+
+    final change = switch (event) {
+      FileSystemCreateEvent() => 'added',
+      FileSystemDeleteEvent() => 'removed',
+      _ => null,
+    };
+    if (change == null) {
+      return;
+    }
+
+    _pendingTouch?.cancel();
+    _pendingTouch = Timer(_touchDebounce, () async {
+      try {
+        if (dryRun) {
+          stdout.writeln(
+            '$_tool: $change ${event.path}; would touch ${pubspec.path} '
+            '(dry-run).',
+          );
+        } else {
+          pubspec.setLastModifiedSync(DateTime.now());
+          stdout.writeln(
+            '$_tool: $change ${event.path}; pubspec touched - '
+            'hot reload to rebuild the asset bundle.',
+          );
+        }
+        await stdout.flush();
+      } on FileSystemException catch (error) {
+        stderr.writeln(
+          '$_tool: cannot touch ${pubspec.path}: ${error.message}',
+        );
+      }
+    });
+  }
 }

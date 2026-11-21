@@ -8,8 +8,8 @@ import 'log.dart';
 /// You normally do not need this widget: adding this package as a dependency is
 /// enough, because its Dart plugin registers itself at startup and installs a
 /// binding that clears the caches. Use this widget only when you want the
-/// refresh to be scoped to a subtree, or when you disabled automatic
-/// registration (for example because the app has a custom binding).
+/// refresh to be scoped to a subtree, or when automatic registration was
+/// skipped (for example because the app has a custom binding).
 ///
 /// Hot reload already resyncs changed asset files and rebuilds the widget tree,
 /// but Flutter keeps decoded images in [ImageCache] and decoded strings and

@@ -27,7 +27,7 @@ Future<void> refreshChangedAssetsOnWeb(Iterable<String> assets) async {
 Future<void> _reload(String asset) async {
   final Stopwatch sw = Stopwatch()..start();
   final String url = ui_web.assetManager.getAssetUrl(asset);
-  assetLog('reload: asset=$asset url=$url');
+  assetLogVerbose('reload: asset=$asset url=$url');
   try {
     await _fetchAsset(asset, url).timeout(
       const Duration(seconds: 8),
@@ -39,14 +39,14 @@ Future<void> _reload(String asset) async {
     assetLog('reload: ERROR asset=$asset url=$url error=$e\n$st');
   } finally {
     sw.stop();
-    assetLog('reload: done asset=$asset elapsed=${sw.elapsedMilliseconds}ms');
+    assetLogVerbose('reload: done asset=$asset elapsed=${sw.elapsedMilliseconds}ms');
   }
 }
 
 Future<void> _fetchAsset(String asset, String url) async {
   try {
     final JSObject init = <String, Object?>{'cache': 'no-store'}.jsify() as JSObject;
-    assetLog('fetch(no-store): url=$url');
+    assetLogVerbose('fetch(no-store): url=$url');
     final _Response response = _Response._(
       await _fetch(url, init).toDart as JSObject,
     );
@@ -55,13 +55,13 @@ Future<void> _fetchAsset(String asset, String url) async {
     final String contentType = _header(response, 'content-type');
     final String cacheControl = _header(response, 'cache-control');
     final String etag = _header(response, 'etag');
-    assetLog(
+    assetLogVerbose(
       'fetch(no-store): url=$url status=$status ok=$ok '
       'content-type=$contentType cache-control=$cacheControl etag=$etag',
     );
     final Uint8List bytes = await _readBytes(response);
     final String fp = _fingerprint(bytes);
-    assetLog(
+    assetLogVerbose(
       'fetch(no-store): url=$url bytes=${bytes.length} fingerprint=$fp',
     );
 
@@ -73,18 +73,18 @@ Future<void> _fetchAsset(String asset, String url) async {
       final Uint8List vbytes = await _readBytes(verify);
       final String vfp = _fingerprint(vbytes);
       final bool same = fp == vfp;
-      assetLog(
+      assetLogVerbose(
         'fetch(default-after-no-store): url=$url status=${verify.status} '
         'bytes=${vbytes.length} fingerprint=$vfp sameAsReload=$same',
       );
       if (!same) {
-        assetLog(
+        assetLogVerbose(
           'fetch(default-after-no-store): MISMATCH url=$url '
           'no-store=$fp default=$vfp',
         );
       }
     } catch (e, st) {
-      assetLog('fetch(default-after-no-store): ERROR url=$url $e\n$st');
+      assetLogVerbose('fetch(default-after-no-store): ERROR url=$url $e\n$st');
     }
   } catch (e, st) {
     assetLog('fetch(no-store): ERROR url=$url error=$e\n$st');

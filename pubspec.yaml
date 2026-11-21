@@ -1,7 +1,7 @@
 name: hot_reload_asset_refresh
 description: Refreshes changed image and asset files on Flutter hot reload, with no app code changes.
-version: 0.0.1
-homepage: https://github.com/RajKavadia/hot_reload_asset_refresh`n
+version: 0.1.0
+homepage: https://github.com/RajKavadia/hot_reload_asset_refresh
 
 environment:
   sdk: ^3.13.2
