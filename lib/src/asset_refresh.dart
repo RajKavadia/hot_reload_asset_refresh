@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'cache_refresh.dart';
+import 'log.dart';
 
 /// Refreshes cached assets when Flutter hot reloads the app.
 ///
@@ -47,6 +48,7 @@ class AssetRefresh extends StatefulWidget {
 class _AssetRefreshState extends State<AssetRefresh> {
   @override
   void reassemble() {
+    assetLog('AssetRefresh widget reassemble');
     // The framework calls this before reassembling descendants, so images are
     // re-resolved against the emptied cache instead of reusing stale entries.
     AssetRefresh.refresh();
