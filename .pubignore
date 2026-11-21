@@ -1,5 +1,7 @@
 .idea/
 .commandcode/
+*.iml
+doc/
 **/build/
 **/.dart_tool/
 example/.dart_tool/
