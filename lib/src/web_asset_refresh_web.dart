@@ -9,8 +9,8 @@ import 'log.dart';
 ///
 /// Flutter evicts its own caches, but on the web the engine loads asset bytes
 /// with `fetch()`, which the browser may answer from its HTTP cache. Fetching
-/// each changed asset again with `cache: 'reload'` forces a network round trip
-/// and replaces the cached copy before the widget tree reassembles, so an
+/// each changed asset again with `cache: 'no-store'` forces a network round trip
+/// and ensures the browser never serves a cached copy, so an
 /// overwritten image shows its new bytes.
 Future<void> refreshChangedAssetsOnWeb(Iterable<String> assets) async {
   final List<String> list = assets.toList(growable: false);
@@ -45,8 +45,8 @@ Future<void> _reload(String asset) async {
 
 Future<void> _fetchAsset(String asset, String url) async {
   try {
-    final JSObject init = <String, Object?>{'cache': 'reload'}.jsify() as JSObject;
-    assetLog('fetch(reload): url=$url init.cache=reload');
+    final JSObject init = <String, Object?>{'cache': 'no-store'}.jsify() as JSObject;
+    assetLog('fetch(no-store): url=$url');
     final _Response response = _Response._(
       await _fetch(url, init).toDart as JSObject,
     );
@@ -56,13 +56,13 @@ Future<void> _fetchAsset(String asset, String url) async {
     final String cacheControl = _header(response, 'cache-control');
     final String etag = _header(response, 'etag');
     assetLog(
-      'fetch(reload): url=$url status=$status ok=$ok '
+      'fetch(no-store): url=$url status=$status ok=$ok '
       'content-type=$contentType cache-control=$cacheControl etag=$etag',
     );
     final Uint8List bytes = await _readBytes(response);
     final String fp = _fingerprint(bytes);
     assetLog(
-      'fetch(reload): url=$url bytes=${bytes.length} fingerprint=$fp',
+      'fetch(no-store): url=$url bytes=${bytes.length} fingerprint=$fp',
     );
 
     // Diagnostic: verify the browser's default cache now serves the same bytes.
@@ -74,20 +74,20 @@ Future<void> _fetchAsset(String asset, String url) async {
       final String vfp = _fingerprint(vbytes);
       final bool same = fp == vfp;
       assetLog(
-        'fetch(default-after-reload): url=$url status=${verify.status} '
+        'fetch(default-after-no-store): url=$url status=${verify.status} '
         'bytes=${vbytes.length} fingerprint=$vfp sameAsReload=$same',
       );
       if (!same) {
         assetLog(
-          'fetch(default-after-reload): MISMATCH url=$url '
-          'reload=$fp default=$vfp',
+          'fetch(default-after-no-store): MISMATCH url=$url '
+          'no-store=$fp default=$vfp',
         );
       }
     } catch (e, st) {
-      assetLog('fetch(default-after-reload): ERROR url=$url $e\n$st');
+      assetLog('fetch(default-after-no-store): ERROR url=$url $e\n$st');
     }
   } catch (e, st) {
-    assetLog('fetch(reload): ERROR url=$url error=$e\n$st');
+    assetLog('fetch(no-store): ERROR url=$url error=$e\n$st');
   }
 }
 

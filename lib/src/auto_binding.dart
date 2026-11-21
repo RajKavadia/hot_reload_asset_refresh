@@ -48,6 +48,16 @@ class HotReloadAssetRefreshPlugin {
       );
       return;
     }
+
+    // No-cache mode is enabled by default for web hot reload.
+    // The web fetch uses 'no-store' cache mode. For full no-cache asset loading,
+    // wrap your app with AssetRefresh or use NoCacheAssetBundle directly.
+    // Users can disable with --dart-define=HOT_RELOAD_ASSET_REFRESH_NO_CACHE=false
+    const bool noCacheEnabled = bool.fromEnvironment('HOT_RELOAD_ASSET_REFRESH_NO_CACHE', defaultValue: true);
+    if (noCacheEnabled) {
+      assetLog('No-cache mode enabled (default): web hot reload uses cache: no-store');
+    }
+
     _AssetRefreshBinding();
     assetLog(
       'registerWith: installed _AssetRefreshBinding '
