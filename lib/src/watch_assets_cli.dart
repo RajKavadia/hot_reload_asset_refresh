@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'asset_directories.dart';
+import 'pubspec_assets.dart';
 
 /// Options for the `watch_assets` development script.
 class WatchAssetsOptions {
@@ -29,7 +29,7 @@ class WatchAssetsOptions {
     if (directoryPaths.isNotEmpty) {
       return directoryPaths;
     }
-    return assetDirectoryEntries(pubspec.readAsStringSync());
+    return assetWatchDirectoryPaths(pubspec.readAsStringSync());
   }
 }
 

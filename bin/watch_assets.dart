@@ -15,12 +15,14 @@
 //     dart run hot_reload_asset_refresh:watch_assets --dry-run --verbose
 //
 // Without directory arguments the directories are read from `flutter.assets` in
-// the pubspec. Only directory entries are watched, matching Flutter: files in
-// subdirectories are only bundled when each subdirectory is declared.
+// the pubspec (directory entries and parent folders of listed files). When the
+// pubspec lists individual files, additions and removals update that list;
+// directory entries still only need a pubspec touch so the bundle rebuilds.
 
 import 'dart:async';
 import 'dart:io';
 
+import 'package:hot_reload_asset_refresh/src/pubspec_assets.dart';
 import 'package:hot_reload_asset_refresh/src/watch_assets_cli.dart';
 
 const _tool = 'watch_assets';
@@ -67,7 +69,7 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
-  final watcher = _PubspecTouchWatcher(
+  final watcher = _PubspecAssetWatcher(
     pubspec: pubspec,
     dryRun: options.dryRun,
     verbose: options.verbose,
@@ -94,8 +96,8 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln('$_tool: dry-run mode (pubspec will not be modified).');
   }
   stdout.writeln(
-    '$_tool: additions and deletions touch pubspec.yaml so the next hot '
-    'reload rebuilds the asset bundle.',
+    '$_tool: additions and deletions update pubspec.yaml (or touch it when '
+    'using directory entries) so the next hot reload rebuilds the asset bundle.',
   );
   await stdout.flush();
 }
@@ -136,8 +138,8 @@ Examples:
 ''');
 }
 
-class _PubspecTouchWatcher {
-  _PubspecTouchWatcher({
+class _PubspecAssetWatcher {
+  _PubspecAssetWatcher({
     required this.pubspec,
     required this.dryRun,
     required this.verbose,
@@ -148,41 +150,90 @@ class _PubspecTouchWatcher {
   final bool verbose;
   Timer? _pendingTouch;
 
+  String get _projectRoot => pubspec.parent.path;
+
   void handleEvent(FileSystemEvent event) {
     if (verbose) {
       stdout.writeln('$_tool: event ${_eventTypeLabel(event)} ${event.path}');
     }
 
-    final change = switch (event) {
-      FileSystemCreateEvent() => 'added',
-      FileSystemDeleteEvent() => 'removed',
-      _ => null,
-    };
-    if (change == null) {
+    final added = event is FileSystemCreateEvent;
+    final removed = event is FileSystemDeleteEvent;
+    if (!added && !removed) {
       return;
     }
 
     _pendingTouch?.cancel();
     _pendingTouch = Timer(_touchDebounce, () async {
       try {
-        if (dryRun) {
-          stdout.writeln(
-            '$_tool: $change ${event.path}; would touch ${pubspec.path} '
-            '(dry-run).',
-          );
-        } else {
-          pubspec.setLastModifiedSync(DateTime.now());
-          stdout.writeln(
-            '$_tool: $change ${event.path}; pubspec touched - '
-            'hot reload to rebuild the asset bundle.',
-          );
-        }
+        await _applyChange(
+          eventPath: event.path,
+          added: added,
+        );
         await stdout.flush();
       } on FileSystemException catch (error) {
         stderr.writeln(
-          '$_tool: cannot touch ${pubspec.path}: ${error.message}',
+          '$_tool: cannot update ${pubspec.path}: ${error.message}',
         );
       }
     });
+  }
+
+  Future<void> _applyChange({
+    required String eventPath,
+    required bool added,
+  }) async {
+    final change = added ? 'added' : 'removed';
+    if (added && Directory(eventPath).existsSync()) {
+      if (verbose) {
+        stdout.writeln('$_tool: $change $eventPath; ignoring directory create.');
+      }
+      return;
+    }
+
+    final assetPath = normalizeAssetPath(_projectRoot, eventPath);
+    final before = pubspec.readAsStringSync();
+    final result = applyAssetFilesystemChange(
+      pubspecContents: before,
+      assetPath: assetPath,
+      added: added,
+    );
+
+    if (dryRun) {
+      stdout.writeln(
+        '$_tool: $change $eventPath ($assetPath); '
+        '${_dryRunLabel(result.kind)} ${pubspec.path} (dry-run).',
+      );
+      return;
+    }
+
+    switch (result.kind) {
+      case PubspecAssetApplyKind.updated:
+        pubspec.writeAsStringSync(result.contents!);
+        stdout.writeln(
+          '$_tool: $change $assetPath; updated ${pubspec.path} - '
+          'hot reload to rebuild the asset bundle.',
+        );
+      case PubspecAssetApplyKind.touchOnly:
+        pubspec.setLastModifiedSync(DateTime.now());
+        stdout.writeln(
+          '$_tool: $change $assetPath; pubspec touched - '
+          'hot reload to rebuild the asset bundle.',
+        );
+      case PubspecAssetApplyKind.unchanged:
+        pubspec.setLastModifiedSync(DateTime.now());
+        stdout.writeln(
+          '$_tool: $change $assetPath; pubspec touched - '
+          'hot reload to rebuild the asset bundle.',
+        );
+    }
+  }
+
+  String _dryRunLabel(PubspecAssetApplyKind kind) {
+    return switch (kind) {
+      PubspecAssetApplyKind.updated => 'would update',
+      PubspecAssetApplyKind.touchOnly => 'would touch',
+      PubspecAssetApplyKind.unchanged => 'would touch',
+    };
   }
 }

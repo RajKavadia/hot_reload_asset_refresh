@@ -94,6 +94,82 @@ flutter:
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
+
+  test(
+    'updates pubspec asset list when entries list individual files',
+    () async {
+      pubspec.writeAsStringSync('''
+name: watch_assets_integration
+flutter:
+  assets:
+    - assets/existing.png
+''');
+
+      final process = await Process.start(
+        _dartExecutable(),
+        [File('bin/watch_assets.dart').absolute.path],
+        workingDirectory: project.path,
+      );
+      addTearDown(() async {
+        process.kill();
+        await process.exitCode.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => -1,
+        );
+      });
+
+      final lines = <String>[];
+      final ready = Completer<void>();
+      final added = Completer<void>();
+      final removed = Completer<void>();
+      process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+        lines.add(line);
+        if (!ready.isCompleted && line.contains('watching assets/')) {
+          ready.complete();
+        }
+        if (!added.isCompleted && line.contains('updated') && line.contains('added')) {
+          added.complete();
+        }
+        if (!removed.isCompleted &&
+            line.contains('updated') &&
+            line.contains('removed')) {
+          removed.complete();
+        }
+      });
+      process.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(lines.add);
+
+      await ready.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => fail('watcher did not start. Output:\n${lines.join('\n')}'),
+      );
+
+      final asset = File('${project.path}/assets/new.json')
+        ..writeAsStringSync('{}');
+      await added.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => fail('no pubspec update after add. Output:\n${lines.join('\n')}'),
+      );
+      expect(
+        pubspec.readAsStringSync(),
+        contains('- assets/new.json'),
+      );
+
+      asset.deleteSync();
+      await removed.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () =>
+            fail('no pubspec update after delete. Output:\n${lines.join('\n')}'),
+      );
+      expect(pubspec.readAsStringSync(), isNot(contains('assets/new.json')));
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }
 
 String _dartExecutable() {
