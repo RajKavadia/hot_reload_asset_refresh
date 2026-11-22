@@ -25,9 +25,50 @@ instead of stale caches. When the Flutter tool reports specific changed assets,
 the binding also records them for a web cache refresh (`fetch` with
 `cache: 'no-store'`).
 
-Edit an image or other asset and save. The next hot reload picks it up.
+Edit an image or other asset and save. The next hot reload picks it up on every
+platform, including **Flutter web**.
 
-Try the **example** app: `cd example && flutter run`.
+Try the **example** app: `cd example && flutter run` (use `-d chrome` for web).
+
+## Flutter web hot reload
+
+On mobile and desktop, Flutter reads bundled assets from the dev file system.
+Hot reload already notices when an **existing** file’s modification time changes,
+so updated images and `rootBundle.loadString` results (for example
+`assets/abc.json`) can be picked up after the caches are cleared.
+
+Web is different. The engine loads asset bytes with the browser’s `fetch()` API,
+and the HTTP cache can keep serving old bytes even after Flutter evicts its own
+in-memory caches. A hot reload that only clears `ImageCache` and `rootBundle` is
+often not enough: the widget tree reassembles, requests the asset again, and the
+browser may still return stale data.
+
+This package addresses that in debug builds on web:
+
+1. **Every hot reload** — Before `performReassemble` runs descendants again, it
+   clears `ImageCache` and `rootBundle` so widgets do not reuse decoded images or
+   bundle entries from the previous generation.
+2. **Changed assets the tool evicts** — When the Flutter tool reports specific
+   assets (for example after you saved an edited file), the binding records them
+   and, on web only, prefetches each URL through `ui_web.assetManager` with
+   `fetch(..., { cache: 'no-store' })` so the browser does not answer from its
+   HTTP cache. The next `Image.asset` or `rootBundle` read then sees fresh bytes.
+
+Typical web workflow:
+
+```sh
+cd example
+flutter run -d chrome
+```
+
+1. Change `assets/images.jpg` or `assets/abc.json` on disk and save.
+2. Hot reload (`r`). The image and JSON text in the example should update without
+   a full restart.
+
+**New or deleted files** still depend on the Flutter tool’s asset bundle (see
+[Adding and removing assets](#adding-and-removing-assets)). After the bundle is
+rebuilt, hot reload plus this package’s cache clearing and web prefetch apply the
+same way.
 
 Web integration tests (asset add/change/delete × hot reload vs restart):
 
@@ -107,10 +148,18 @@ terminal from the project root:
 dart run hot_reload_asset_refresh:watch_assets
 ```
 
-It reads directory entries from `flutter.assets` in `pubspec.yaml` (you can also
-pass directories explicitly). When a file is added or deleted in one of those
-directories, it touches `pubspec.yaml`, so the next hot reload rebuilds the
-asset bundle and regenerates the manifest.
+It discovers paths from `flutter.assets` in `pubspec.yaml` — directory entries
+such as `assets/`, plus the parent folder of each listed file (so a pubspec that
+only lists `assets/foo.png` still watches `assets/`). You can also pass
+directories explicitly.
+
+When a file is added or removed:
+
+- If you declare **directories** (`assets/`), it **touches** `pubspec.yaml` so
+  the next hot reload rebuilds the asset bundle and manifest (Flutter does not
+  notice deletions inside a directory otherwise).
+- If you list **individual files**, it **adds or removes** that path under
+  `flutter.assets` and saves the pubspec, which triggers the same bundle rebuild.
 
 Options:
 
@@ -128,10 +177,8 @@ dart run hot_reload_asset_refresh:watch_assets assets/ assets/icons/
 ```
 
 Hot reload after the change as usual (`r`, or let the IDE reload on the next
-save).
-
-Web works the same way, but the browser may need a refresh before it requests
-the rebuilt manifest.
+save). On web, once the bundle lists the new or removed asset, the debug binding
+clears caches and prefetches evicted URLs as described above.
 
 ## Platform notes
 
@@ -146,4 +193,5 @@ the rebuilt manifest.
   still be stale unless you clear that bundle or wrap the subtree with
   [AssetRefresh].
 - On the web, browser HTTP caching is bypassed for assets the tool evicts during
-  hot reload; other cache behavior may still apply for custom loaders.
+  hot reload (`cache: 'no-store'` prefetch). Custom loaders or assets loaded
+  outside `rootBundle` / `Image.asset` may still need their own refresh logic.
