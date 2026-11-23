@@ -5,11 +5,12 @@ import 'log.dart';
 
 /// Refreshes cached assets when Flutter hot reloads the app.
 ///
-/// You normally do not need this widget: adding this package as a dependency is
-/// enough, because its Dart plugin registers itself at startup and installs a
-/// binding that clears the caches. Use this widget only when you want the
-/// refresh to be scoped to a subtree, or when automatic registration was
-/// skipped (for example because the app has a custom binding).
+/// You normally do not need this widget: on web the package's plugin registers
+/// itself at startup, and on native platforms
+/// `AssetRefreshBinding.ensureInitialized()` in `main()` installs a binding that
+/// clears the caches. Use this widget only when you want the refresh scoped to a
+/// subtree, or when the binding was not installed (for example because the app
+/// created another binding first).
 ///
 /// Hot reload already resyncs changed asset files and rebuilds the widget tree,
 /// but Flutter keeps decoded images in [ImageCache] and decoded strings and

@@ -22,5 +22,4 @@ flutter:
 
   assets:
     - assets/images.jpg
-    - assets/images-6.jpg
-    - assets/image-5.jpg
+    - assets/abc.json

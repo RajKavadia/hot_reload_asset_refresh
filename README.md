@@ -1,8 +1,8 @@
 # hot_reload_asset_refresh
 
-Refreshes changed assets on Flutter hot reload. **No widget wrapping and no app
-code changes**: add the dependency, and the package's Flutter plugin registers
-itself at startup in debug builds.
+Refreshes changed assets on Flutter hot reload. On web there is no app code
+change: add the dependency and the web plugin registers itself. On native
+platforms the app installs the binding with one line in `main()`.
 
 Works on Android, iOS, Linux, macOS, Windows, and web. Debug hot reload only —
 not for release builds or runtime asset updates.
@@ -13,17 +13,39 @@ Add the dependency and run `flutter pub get`:
 
 ```yaml
 dependencies:
-  hot_reload_asset_refresh: ^0.1.0
+  hot_reload_asset_refresh: ^0.2.0
 ```
 
-That is the whole setup. Nothing in the app imports or calls the package.
+On **web** that is the whole setup: the generated web plugin registrant installs
+the binding before `main`.
 
-In debug builds the plugin installs a `WidgetsFlutterBinding` subclass before
-`main`. On every hot reload it clears `ImageCache` and `rootBundle` before the
-widget tree reassembles, so images and string assets are re-read from disk
-instead of stale caches. When the Flutter tool reports specific changed assets,
-the binding also records them for a web cache refresh (`fetch` with
-`cache: 'no-store'`).
+On **Android, iOS, Linux, macOS, and Windows** install the binding as the first
+statement of `main()`:
+
+```dart
+import 'package:hot_reload_asset_refresh/hot_reload_asset_refresh.dart';
+
+void main() {
+  AssetRefreshBinding.ensureInitialized();
+  runApp(const MyApp());
+}
+```
+
+It must run before any other binding is created (before
+`WidgetsFlutterBinding.ensureInitialized()` and before `runApp`). In debug builds
+the binding clears `ImageCache` and `rootBundle` before the widget tree
+reassembles, so images and string assets are re-read from disk instead of stale
+caches. When the Flutter tool reports specific changed assets, the binding also
+records them for a web cache refresh (`fetch` with `cache: 'no-store'`).
+
+> **Why can't the plugin install the binding itself on native platforms?** The
+> Dart plugin registrant runs before `main()`, while the engine has not yet
+> published `PlatformDispatcher.initialLifecycleState`. Constructing a
+> `BindingBase` that early throws `LateInitializationError` halfway through
+> initialization, after `BindingBase._debugInitializedType` was already
+> assigned. The isolate is then left with a half-initialized binding and the
+> app's `runApp()` fails with `Binding is already initialized to ...`. Web does
+> not have that constraint, which is why auto-registration still works there.
 
 Edit an image or other asset and save. The next hot reload picks it up on every
 platform, including **Flutter web**.
@@ -79,14 +101,17 @@ flutter test --platform chrome test/web/asset_lifecycle_web_test.dart
 
 ## How it works
 
-- The package declares a Dart plugin (`dartPluginClass` on native platforms and
-  a web plugin entry point). Flutter generates a plugin registrant that calls it
-  at startup. On web the generated web plugin registrant runs it before `main`.
+- On web the package declares a web plugin; the generated web plugin registrant
+  installs `AssetRefreshBinding` before `main`.
+- On native platforms the app calls `AssetRefreshBinding.ensureInitialized()` in
+  `main()`. The Dart plugin registrant only logs a hint, because it runs before
+  `main()` and cannot create a binding safely (see above).
 - Hot reload reassembles the widget tree. `WidgetsBinding.performReassemble` is
   overridden to clear caches every time, then optionally refresh changed asset
   URLs on the web before descendants resolve `ImageProvider`s again.
-- Automatic registration is skipped in release builds, under `flutter test`, and
-  under `flutter test integration_test`, so test bindings are never replaced.
+- In release builds, under `flutter test`, and under
+  `flutter test integration_test`, `ensureInitialized` keeps the default
+  binding, so test and release bindings are never replaced.
 
 ### Verbose logs
 
@@ -100,8 +125,8 @@ flutter run --dart-define=HOT_RELOAD_ASSET_REFRESH_VERBOSE=true
 ## Optional widget
 
 `AssetRefresh` refreshes only its subtree. It is useful when the app already
-has a custom binding (so automatic registration is skipped) or when you want the
-refresh scoped explicitly:
+created another binding (so `AssetRefreshBinding` was not installed) or when you
+want the refresh scoped explicitly:
 
 ```dart
 import 'package:hot_reload_asset_refresh/hot_reload_asset_refresh.dart';
@@ -186,8 +211,9 @@ clears caches and prefetches evicted URLs as described above.
   requires symlink support, which means enabling Developer Mode
   (`start ms-settings:developers`). Web and the other platforms do not need
   this.
-- Adding the package does not modify `main.dart`, the widget tree, or any other
-  app source.
+- Adding the package does not modify `main.dart` on web. On native platforms add
+  `AssetRefreshBinding.ensureInitialized()` as the first line of `main()`; no
+  widget wrapping and no other app source changes are needed.
 - Fonts are loaded by the engine and are not reloaded.
 - Only [rootBundle] is cleared. Assets loaded through a custom [AssetBundle] may
   still be stale unless you clear that bundle or wrap the subtree with

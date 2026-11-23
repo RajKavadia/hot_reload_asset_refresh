@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:hot_reload_asset_refresh/hot_reload_asset_refresh.dart';
 
 void main() {
+  // REQUIRED on Android/iOS: install the cache-clearing binding BEFORE runApp.
+  // The plugin registrant runs before main() when initialLifecycleState is not
+  // yet available, so we must install it here. Without this, asset caches are
+  // never cleared on hot reload for native platforms (Android/iOS).
+  // To see detailed logs: run with `flutter run -dart-define=HOT_RELOAD_ASSET_REFRESH_VERBOSE=true`
+  AssetRefreshBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
 /// Minimal demo: edit [assets/images.jpg] or [assets/abc.json] and hot reload.
 ///
-/// The example depends on [hot_reload_asset_refresh] via `path: ../` but does
-/// not import it; the plugin registers itself in debug builds.
+/// The example depends on [hot_reload_asset_refresh] via `path: ../`.
+/// [AssetRefreshBinding.ensureInitialized] installs the cache-clearing binding;
+/// it must run before [runApp].
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -52,9 +60,7 @@ class _AssetHotReloadDemoState extends State<AssetHotReloadDemo> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Asset hot reload demo'),
-      ),
+      appBar: AppBar(title: const Text('Asset hot reload demo')),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -69,7 +75,7 @@ class _AssetHotReloadDemoState extends State<AssetHotReloadDemo> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Image.asset(
-                  'assets/image-5.jpg',
+                  'assets/images.jpg',
                   width: 160,
                   height: 160,
                   fit: BoxFit.cover,
@@ -77,7 +83,10 @@ class _AssetHotReloadDemoState extends State<AssetHotReloadDemo> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text('assets/abc.json', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'assets/abc.json',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             FutureBuilder<String>(
               future: _jsonFuture,

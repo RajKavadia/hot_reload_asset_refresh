@@ -1,3 +1,23 @@
+## 0.2.0
+
+* **Breaking (native only):** install the binding yourself with
+  `AssetRefreshBinding.ensureInitialized()` as the first statement of `main()`.
+  The plugin registrant runs before `main()`, when
+  `PlatformDispatcher.initialLifecycleState` is not yet available; constructing
+  a `BindingBase` there threw `LateInitializationError` after
+  `_debugInitializedType` was assigned, leaving the isolate half-initialized so
+  that `runApp()` failed with `Binding is already initialized to
+  _AssetRefreshBinding`. The registrant now only logs a hint on native
+  platforms.
+* Web is unchanged: the web plugin still installs the binding before `main`.
+* `AssetRefreshBinding` is now public and `ensureInitialized()` is idempotent;
+  it keeps an already-installed binding instead of replacing it, and keeps the
+  default binding in release builds and under `flutter test` /
+  `flutter test integration_test`.
+* Registration guards now check `BindingBase.debugBindingType()` instead of
+  probing `WidgetsBinding.instance`, so a half-initialized binding is no longer
+  reported as "not initialized".
+
 ## 0.1.0
 
 * Clear `ImageCache` and `rootBundle` on every debug hot reload reassemble, not
